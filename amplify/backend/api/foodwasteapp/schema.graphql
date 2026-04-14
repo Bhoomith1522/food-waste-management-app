@@ -4,10 +4,15 @@ input AMPLIFY { globalAuthRule: AuthRule = { allow: public } } # FOR TESTING ONL
 
 type FoodItem @model {
   id: ID!
-  title: String!
-  hotel: String!
-  type: String!
-  expiryTime: AWSDateTime!
-  claimed: Boolean
+  title: String
+  hotel: String
+  type: String
+  expiryTime: AWSDateTime
   image: String
-}
+  claimed: Boolean
+  ngo: String
+  hotelPhone: String
+  hotelAddress: String
+  hotelMapLink: String
+  token:String
+  }
