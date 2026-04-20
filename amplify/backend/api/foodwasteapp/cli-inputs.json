@@ -4,8 +4,17 @@
     "apiName": "foodwasteapp",
     "serviceName": "AppSync",
     "defaultAuthType": {
-      "mode": "API_KEY",
-      "expirationTime": 7
-    }
+      "mode": "AMAZON_COGNITO_USER_POOLS",
+      "cognitoUserPoolId": "authfoodwasteapp2067c825"
+    },
+    "conflictResolution": {},
+    "additionalAuthTypes": [
+      {
+        "mode": "API_KEY",
+        "expirationTime": 30,
+        "apiKeyExpirationDate": "2026-05-20T09:10:22.260Z",
+        "keyDescription": "test-key"
+      }
+    ]
   }
 }

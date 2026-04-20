@@ -58,7 +58,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<Map<String, String>> foodItems = [];
+  List<Map<String, dynamic>> foodItems = [];
 
   Set<String> seenItems = {};
   int notificationCount = 0;
@@ -69,16 +69,11 @@ class _HomeScreenState extends State<HomeScreen> {
     fetchFood();
   }
 
-  // ✅ NEW: GET S3 IMAGE URL
   Future<String> getImageUrl(String key) async {
     try {
-      final result = await Amplify.Storage.getUrl(
-        key: key,
-      ).result;
-
+      final result = await Amplify.Storage.getUrl(key: key).result;
       return result.url.toString();
     } catch (e) {
-      print("Error getting image URL: $e");
       return "";
     }
   }
@@ -108,13 +103,15 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Map<String, List<Map<String, String>>> groupFoodItems() {
-    Map<String, List<Map<String, String>>> grouped = {};
+  Map<String, List<Map<String, dynamic>>> groupFoodItems() {
+    Map<String, List<Map<String, dynamic>>> grouped = {};
+
     for (var item in foodItems) {
       String key = item["title"] ?? "Unknown";
       grouped.putIfAbsent(key, () => []);
       grouped[key]!.add(item);
     }
+
     return grouped;
   }
 
@@ -130,10 +127,10 @@ class _HomeScreenState extends State<HomeScreen> {
             expiryTime
             claimed
             image
-            ngo
             hotelPhone
             hotelAddress
             hotelMapLink
+            animalFood
           }
         }
       }
@@ -149,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final data = jsonDecode(response.data!);
       final List items = data["listFoodItems"]["items"];
 
-      List<Map<String, String>> loadedFood = [];
+      List<Map<String, dynamic>> loadedFood = [];
       int newCount = 0;
 
       Set<String> tempSeen = Set.from(seenItems);
@@ -157,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
       for (var item in items) {
         if (item == null) continue;
 
-        String expiryStr = item["expiryTime"]?.toString() ?? "";
+        String expiryStr = item["expiryTime"] ?? "";
         if (expiryStr.isEmpty) continue;
 
         DateTime expiry = DateTime.parse(expiryStr);
@@ -165,6 +162,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
         String id = item["id"] ?? "";
         bool isClaimed = item["claimed"].toString() == "true";
+
+        // ✅ FIXED BOOLEAN HANDLING
+        bool isAnimalFood =
+            item["animalFood"] == true || item["animalFood"] == "true";
 
         if (!tempSeen.contains(id) && !isClaimed) {
           newCount++;
@@ -181,11 +182,12 @@ class _HomeScreenState extends State<HomeScreen> {
           "hotelPhone": item["hotelPhone"] ?? "",
           "hotelAddress": item["hotelAddress"] ?? "",
           "hotelMapLink": item["hotelMapLink"] ?? "",
+          "animalFood": isAnimalFood,
         });
       }
 
       for (var item in loadedFood) {
-        seenItems.add(item["id"]!);
+        seenItems.add(item["id"]);
       }
 
       setState(() {
@@ -196,13 +198,12 @@ class _HomeScreenState extends State<HomeScreen> {
       if (newCount > 0) {
         triggerNotificationAlert();
       }
-
     } catch (e) {
       print("Fetch error: $e");
     }
   }
 
-  Future<void> addFood(Map<String, String> newFood) async {
+  Future<void> addFood(Map<String, dynamic> newFood) async {
     String mutation = '''
       mutation {
         createFoodItem(input: {
@@ -214,7 +215,8 @@ class _HomeScreenState extends State<HomeScreen> {
           claimed: false,
           hotelPhone: "${newFood["hotelPhone"]}",
           hotelAddress: "${newFood["hotelAddress"]}",
-          hotelMapLink: "${newFood["hotelMapLink"]}"
+          hotelMapLink: "${newFood["hotelMapLink"]}",
+          animalFood: ${newFood["animalFood"] == true}
         }) { id }
       }
     ''';
@@ -226,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
     fetchFood();
   }
 
-  Future<void> claimFood(Map<String, String> item) async {
+  Future<void> claimFood(Map<String, dynamic> item) async {
     await Amplify.API.mutate(
       request: GraphQLRequest(
         document:
@@ -237,16 +239,12 @@ class _HomeScreenState extends State<HomeScreen> {
     fetchFood();
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          "🎁 Food claimed successfully! Thank you for helping the community.",
-        ),
-      ),
+      SnackBar(content: Text("🎁 Food claimed successfully!")),
     );
 
     if (item["hotelMapLink"] != null &&
-        item["hotelMapLink"]!.isNotEmpty) {
-      openMap(item["hotelMapLink"]!);
+        item["hotelMapLink"].toString().isNotEmpty) {
+      openMap(item["hotelMapLink"]);
     }
   }
 
@@ -310,15 +308,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: entry.value.map((item) {
                     return ListTile(
                       leading: item["image"] != null &&
-                              item["image"]!.isNotEmpty
+                              item["image"].toString().isNotEmpty
                           ? FutureBuilder<String>(
-                              future: getImageUrl(item["image"]!),
+                              future: getImageUrl(item["image"]),
                               builder: (context, snapshot) {
                                 if (!snapshot.hasData ||
                                     snapshot.data!.isEmpty) {
                                   return Icon(Icons.fastfood);
                                 }
-
                                 return Image.network(
                                   snapshot.data!,
                                   width: 50,
@@ -335,7 +332,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text("Type: ${item["type"]}"),
-                          Text("⏳ ${getTimeLeft(item["expiryTime"]!)}"),
+
+                          if (item["animalFood"] == true)
+                            Text(
+                              "🐾 Suitable for Animals",
+                              style: TextStyle(color: Colors.green),
+                            ),
+
+                          Text("⏳ ${getTimeLeft(item["expiryTime"])}"),
                         ],
                       ),
 

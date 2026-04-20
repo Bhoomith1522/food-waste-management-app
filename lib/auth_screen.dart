@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
-import 'bot_helper.dart'; // ✅ ADD THIS
+import 'bot_helper.dart';
 
 class AuthScreen extends StatefulWidget {
   @override
@@ -13,9 +13,13 @@ class _AuthScreenState extends State<AuthScreen>
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final codeController = TextEditingController();
+  final newPasswordController = TextEditingController();
 
   bool isLogin = true;
   bool isConfirming = false;
+  bool isResettingPassword = false;
+
+  // ✅ FIXED
   bool showPassword = false;
 
   String selectedRole = "NGO";
@@ -43,23 +47,39 @@ class _AuthScreenState extends State<AuthScreen>
     super.dispose();
   }
 
-  bool isValidNGOEmail(String email) {
-    final keywords = ["donate", "donation", "charity", "help", "save", "hunger"];
+  bool isValidEmailByRole(String email) {
     email = email.toLowerCase();
-    return keywords.any((word) => email.contains(word));
+
+    if (email.endsWith("@gmail.com")) return true;
+
+    if (selectedRole == "NGO") {
+      return email.contains("ngo");
+    }
+
+    if (selectedRole == "Orphanage") {
+      return email.contains("orphan");
+    }
+
+    if (selectedRole == "BlueCross") {
+      return email.contains("animal");
+    }
+
+    return true;
   }
 
+  // 🔥 FIXED LOGIN BUG HERE
   Future<void> handleAuth() async {
     try {
       String email = emailController.text.trim();
       String password = passwordController.text.trim();
 
-      if (!isValidNGOEmail(email)) {
-        _showSnack("Use NGO-type email");
+      if (!isValidEmailByRole(email)) {
+        _showSnack("Enter valid ${selectedRole} email");
         return;
       }
 
       if (isLogin) {
+        // ✅ FIX: prevent "already signed in"
         try {
           await Amplify.Auth.signOut();
         } catch (_) {}
@@ -72,8 +92,9 @@ class _AuthScreenState extends State<AuthScreen>
         if (res.isSignedIn) {
           Navigator.pushReplacementNamed(context, "/home");
         } else {
-          _showSnack("Please verify your account first ⚠️");
+          _showSnack("Verify your account first");
         }
+
       } else {
         final res = await Amplify.Auth.signUp(
           username: email,
@@ -83,18 +104,15 @@ class _AuthScreenState extends State<AuthScreen>
           }),
         );
 
-        if (res.nextStep.signUpStep == AuthSignUpStep.confirmSignUp) {
+        if (res.nextStep.signUpStep ==
+            AuthSignUpStep.confirmSignUp) {
           setState(() => isConfirming = true);
-          _showSnack("Verification code sent 📩");
-        } else {
-          _showSnack("Signup complete, please login");
-          setState(() => isLogin = true);
+          _showSnack("Verification code sent");
         }
       }
+
     } on AuthException catch (e) {
       _showSnack(e.message);
-    } catch (e) {
-      _showSnack("Something went wrong ❌");
     }
   }
 
@@ -111,40 +129,75 @@ class _AuthScreenState extends State<AuthScreen>
         isConfirming = false;
         isLogin = true;
       });
+
     } on AuthException catch (e) {
       _showSnack(e.message);
     }
   }
 
+  // 🔑 RESET PASSWORD
+  Future<void> resetPassword() async {
+    try {
+      await Amplify.Auth.resetPassword(
+        username: emailController.text.trim(),
+      );
+
+      setState(() => isResettingPassword = true);
+
+      _showSnack("Reset code sent");
+
+    } catch (e) {
+      _showSnack("Error sending reset code");
+    }
+  }
+
+  Future<void> confirmResetPassword() async {
+    try {
+      await Amplify.Auth.confirmResetPassword(
+        username: emailController.text.trim(),
+        newPassword: newPasswordController.text.trim(),
+        confirmationCode: codeController.text.trim(),
+      );
+
+      _showSnack("Password reset successful");
+
+      setState(() {
+        isResettingPassword = false;
+        isLogin = true;
+      });
+
+    } catch (e) {
+      _showSnack("Reset failed");
+    }
+  }
+
   void _showSnack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg, textAlign: TextAlign.center),
-        behavior: SnackBarBehavior.floating,
-        margin: EdgeInsets.symmetric(horizontal: 80, vertical: 20),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-      ),
+      SnackBar(content: Text(msg, textAlign: TextAlign.center)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: Text("Authentication"),
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+      ),
 
-      // ✅ WRAPPED WITH STACK
       body: Stack(
         children: [
-
           FadeTransition(
             opacity: _fadeAnimation,
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [Colors.green.shade400, Colors.green.shade800],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
                 ),
               ),
               child: Center(
@@ -152,38 +205,28 @@ class _AuthScreenState extends State<AuthScreen>
                   child: Padding(
                     padding: EdgeInsets.all(20),
                     child: Card(
-                      elevation: 12,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(25),
                       ),
                       child: Padding(
                         padding: EdgeInsets.all(25),
                         child: Column(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
 
-                            CircleAvatar(
-                              radius: 35,
-                              backgroundColor: Colors.green.shade100,
-                              child: Icon(Icons.eco,
-                                  size: 40, color: Colors.green),
-                            ),
-
-                            SizedBox(height: 20),
-
                             Text(
-                              isConfirming
-                                  ? "Verify Account"
-                                  : (isLogin ? "Welcome Back" : "Create Account"),
+                              isResettingPassword
+                                  ? "Reset Password"
+                                  : isConfirming
+                                      ? "Verify Account"
+                                      : (isLogin ? "Login" : "Signup"),
                               style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                              ),
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold),
                             ),
 
                             SizedBox(height: 20),
 
-                            if (!isConfirming)
+                            if (!isConfirming && !isResettingPassword)
                               DropdownButtonFormField<String>(
                                 value: selectedRole,
                                 items: roles.map((role) {
@@ -197,25 +240,18 @@ class _AuthScreenState extends State<AuthScreen>
                                 },
                               ),
 
-                            SizedBox(height: 15),
-
                             TextField(
                               controller: emailController,
-                              decoration: InputDecoration(
-                                labelText: "Email",
-                                prefixIcon: Icon(Icons.email),
-                              ),
+                              decoration: InputDecoration(labelText: "Email"),
                             ),
 
-                            SizedBox(height: 15),
-
-                            if (!isConfirming)
+                            // ✅ FIXED SHOW PASSWORD
+                            if (!isConfirming && !isResettingPassword)
                               TextField(
                                 controller: passwordController,
                                 obscureText: !showPassword,
                                 decoration: InputDecoration(
                                   labelText: "Password",
-                                  prefixIcon: Icon(Icons.lock),
                                   suffixIcon: IconButton(
                                     icon: Icon(
                                       showPassword
@@ -231,41 +267,59 @@ class _AuthScreenState extends State<AuthScreen>
                                 ),
                               ),
 
-                            if (isConfirming) ...[
-                              SizedBox(height: 15),
+                            if (isConfirming || isResettingPassword)
                               TextField(
                                 controller: codeController,
+                                decoration:
+                                    InputDecoration(labelText: "Code"),
+                              ),
+
+                            if (isResettingPassword)
+                              TextField(
+                                controller: newPasswordController,
+                                obscureText: !showPassword,
                                 decoration: InputDecoration(
-                                  labelText: "Verification Code",
-                                  prefixIcon: Icon(Icons.verified),
+                                  labelText: "New Password",
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      showPassword
+                                          ? Icons.visibility
+                                          : Icons.visibility_off,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        showPassword = !showPassword;
+                                      });
+                                    },
+                                  ),
                                 ),
                               ),
-                            ],
 
                             SizedBox(height: 20),
 
                             ElevatedButton(
-                              onPressed:
-                                  isConfirming ? confirmUser : handleAuth,
-                              child: Text(
-                                isConfirming
-                                    ? "Verify"
-                                    : (isLogin ? "Login" : "Signup"),
-                              ),
+                              onPressed: isConfirming
+                                  ? confirmUser
+                                  : isResettingPassword
+                                      ? confirmResetPassword
+                                      : handleAuth,
+                              child: Text("Continue"),
                             ),
 
-                            if (!isConfirming)
+                            if (!isConfirming && !isResettingPassword)
                               TextButton(
                                 onPressed: () {
-                                  setState(() {
-                                    isLogin = !isLogin;
-                                  });
+                                  setState(() => isLogin = !isLogin);
                                 },
-                                child: Text(
-                                  isLogin
-                                      ? "New user? Signup"
-                                      : "Already have an account? Login",
-                                ),
+                                child: Text(isLogin
+                                    ? "Signup instead"
+                                    : "Login instead"),
+                              ),
+
+                            if (isLogin && !isResettingPassword)
+                              TextButton(
+                                onPressed: resetPassword,
+                                child: Text("Forgot Password?"),
                               ),
                           ],
                         ),
@@ -277,14 +331,11 @@ class _AuthScreenState extends State<AuthScreen>
             ),
           ),
 
-          // 🤖 BOT GUIDE
           BotHelper(
             messages: [
-              "Welcome 👋",
-              "Select your role (NGO / Orphanage / BlueCross)",
-              "Enter your email and password",
-              "Signup if new or login if existing",
-              "Verify using code if required",
+              "Login or Signup",
+              "Use Gmail for testing",
+              "Forgot password if needed",
             ],
           ),
         ],

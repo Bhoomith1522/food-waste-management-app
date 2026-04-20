@@ -4,7 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:amplify_flutter/amplify_flutter.dart';
 
 class AddFoodScreen extends StatefulWidget {
-  final Function(Map<String, String>) addFood;
+  final Function(Map<String, dynamic>) addFood;
 
   AddFoodScreen({required this.addFood});
 
@@ -14,6 +14,7 @@ class AddFoodScreen extends StatefulWidget {
 
 class _AddFoodScreenState extends State<AddFoodScreen>
     with SingleTickerProviderStateMixin {
+
   final TextEditingController titleController = TextEditingController();
   final TextEditingController hotelController = TextEditingController();
   final TextEditingController typeController = TextEditingController();
@@ -25,10 +26,10 @@ class _AddFoodScreenState extends State<AddFoodScreen>
   File? _image;
   bool isLoading = false;
 
-  // ✅ NEW: EXPIRY VARIABLE
+  bool isAnimalFood = false;
+
   DateTime? selectedExpiry;
 
-  // 🤖 BOT STATE
   bool showBot = false;
   int botStep = 0;
 
@@ -37,24 +38,22 @@ class _AddFoodScreenState extends State<AddFoodScreen>
 
   List<String> botMessages = [
     "👋 Hi! I’ll guide you to add food.",
-    "🍱 Enter food title (e.g. Rice, Curry)",
+    "🍱 Enter food title",
     "🏨 Enter hotel name",
-    "🥗 Mention food type (Veg/Non-Veg)",
-    "📞 Add hotel phone number",
-    "📍 Add address & map link",
-    "📸 Upload food image",
-    "⏰ Select expiry time",
-    "✅ Finally click Submit!"
+    "🥗 Enter food type",
+    "📞 Add phone number",
+    "📍 Add address & map",
+    "📸 Upload image",
+    "⏰ Select expiry",
+    "✅ Click Submit"
   ];
 
   @override
   void initState() {
     super.initState();
 
-    _controller = AnimationController(
-      vsync: this,
-      duration: Duration(milliseconds: 300),
-    );
+    _controller =
+        AnimationController(vsync: this, duration: Duration(milliseconds: 300));
 
     _scaleAnimation =
         CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
@@ -71,15 +70,12 @@ class _AddFoodScreenState extends State<AddFoodScreen>
       setState(() => botStep++);
     } else {
       _controller.reverse();
-      Future.delayed(Duration(milliseconds: 300), () {
-        setState(() => showBot = false);
-      });
+      setState(() => showBot = false);
     }
   }
 
-  // 🔥 CENTER POPUP
   void showAppreciationPopup(String message) {
-    final overlay = Overlay.of(context);
+    final overlay = Overlay.of(context)!;
 
     late OverlayEntry overlayEntry;
 
@@ -130,7 +126,6 @@ class _AddFoodScreenState extends State<AddFoodScreen>
     overlay.insert(overlayEntry);
   }
 
-  // 📸 PICK IMAGE
   Future<void> pickImage() async {
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
 
@@ -141,7 +136,6 @@ class _AddFoodScreenState extends State<AddFoodScreen>
     }
   }
 
-  // ☁️ UPLOAD IMAGE
   Future<String> uploadImage(File file) async {
     final key = "images/${DateTime.now().millisecondsSinceEpoch}.jpg";
 
@@ -153,13 +147,13 @@ class _AddFoodScreenState extends State<AddFoodScreen>
     return key;
   }
 
-  // ✅ PICK EXPIRY DATE + TIME
+  // 🔥 FIXED: LONG EXPIRY SUPPORT
   Future<void> pickExpiryDateTime() async {
     DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
       firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(Duration(days: 7)),
+      lastDate: DateTime.now().add(Duration(days: 365 * 5)), // ✅ 5 YEARS
     );
 
     if (pickedDate == null) return;
@@ -187,14 +181,14 @@ class _AddFoodScreenState extends State<AddFoodScreen>
         hotelController.text.isEmpty ||
         typeController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Please fill all required fields")),
+        SnackBar(content: Text("Fill all required fields")),
       );
       return false;
     }
 
     if (selectedExpiry == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Please select expiry date & time")),
+        SnackBar(content: Text("Select expiry time")),
       );
       return false;
     }
@@ -222,6 +216,7 @@ class _AddFoodScreenState extends State<AddFoodScreen>
       "hotelPhone": phoneController.text,
       "hotelAddress": addressController.text,
       "hotelMapLink": mapLinkController.text,
+      "animalFood": isAnimalFood,
     });
 
     setState(() => isLoading = false);
@@ -260,41 +255,49 @@ class _AddFoodScreenState extends State<AddFoodScreen>
                     decoration: InputDecoration(labelText: "Veg / Non-Veg"),
                   ),
 
-                  SizedBox(height: 15),
+                  SizedBox(height: 10),
 
-                  // ✅ EXPIRY PICKER UI
-                  ElevatedButton(
-                    onPressed: pickExpiryDateTime,
-                    child: Text("Select Expiry Date & Time"),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: isAnimalFood,
+                        onChanged: (value) {
+                          setState(() {
+                            isAnimalFood = value!;
+                          });
+                        },
+                      ),
+                      Text("Suitable for Animals 🐾"),
+                    ],
                   ),
 
                   SizedBox(height: 10),
+
+                  ElevatedButton(
+                    onPressed: pickExpiryDateTime,
+                    child: Text("Select Expiry"),
+                  ),
 
                   Text(
                     selectedExpiry == null
                         ? "No expiry selected"
                         : "Expiry: ${selectedExpiry.toString()}",
-                    style: TextStyle(color: Colors.grey),
                   ),
-
-                  SizedBox(height: 15),
 
                   TextField(
                     controller: phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: InputDecoration(labelText: "Hotel Phone"),
+                    decoration: InputDecoration(labelText: "Phone"),
                   ),
                   TextField(
                     controller: addressController,
-                    decoration: InputDecoration(labelText: "Hotel Address"),
+                    decoration: InputDecoration(labelText: "Address"),
                   ),
                   TextField(
                     controller: mapLinkController,
-                    decoration:
-                        InputDecoration(labelText: "Google Maps Link"),
+                    decoration: InputDecoration(labelText: "Map Link"),
                   ),
 
-                  SizedBox(height: 20),
+                  SizedBox(height: 15),
 
                   ElevatedButton(
                     onPressed: pickImage,
@@ -317,44 +320,20 @@ class _AddFoodScreenState extends State<AddFoodScreen>
             ),
           ),
 
-          // 🤖 CHATBOT
           if (showBot)
             Center(
               child: ScaleTransition(
                 scale: _scaleAnimation,
-                child: FadeTransition(
-                  opacity: _scaleAnimation,
-                  child: Container(
-                    width: MediaQuery.of(context).size.width * 0.8,
-                    padding: EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.smart_toy,
-                            size: 50, color: Colors.green),
-                        Text(botMessages[botStep],
-                            textAlign: TextAlign.center),
-                        Row(
-                          mainAxisAlignment:
-                              MainAxisAlignment.spaceBetween,
-                          children: [
-                            TextButton(
-                                onPressed: () {
-                                  _controller.reverse();
-                                  setState(() => showBot = false);
-                                },
-                                child: Text("Close")),
-                            ElevatedButton(
-                                onPressed: nextBotStep,
-                                child: Text("Next")),
-                          ],
-                        )
-                      ],
-                    ),
+                child: Container(
+                  padding: EdgeInsets.all(20),
+                  color: Colors.white,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(botMessages[botStep]),
+                      ElevatedButton(
+                          onPressed: nextBotStep, child: Text("Next"))
+                    ],
                   ),
                 ),
               ),
